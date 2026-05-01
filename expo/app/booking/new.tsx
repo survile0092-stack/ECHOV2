@@ -71,79 +71,27 @@ export default function NewBookingScreen() {
   const [prepayment, setPrepayment] = useState("");
 
   const [tabVisible, setTabVisible] = useState<boolean>(true);
-  const [tabPlaced, setTabPlaced] = useState<boolean>(false);
-  const tabPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const tabOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const handlePan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const handleOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const tapCountRef = useRef<number>(0);
+  const lastTapRef = useRef<number>(0);
 
-  const handleTripleTap = useCallback(() => {
+  const handleTabTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current > 600) {
+      tapCountRef.current = 0;
+    }
+    lastTapRef.current = now;
     tapCountRef.current += 1;
     console.log("[NewBookingScreen] tab tap", tapCountRef.current);
     if (tapCountRef.current >= 3) {
       tapCountRef.current = 0;
       setTabVisible(false);
-      setTabPlaced(false);
-      tabPan.setValue({ x: 0, y: 0 });
-      tabOffset.current = { x: 0, y: 0 };
-      handlePan.setValue({ x: 0, y: 0 });
-      handleOffset.current = { x: 0, y: 0 };
     }
-  }, [tabPan, handlePan]);
+  }, []);
 
-  const tabPanResponder = useMemo(() =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 4 || Math.abs(gs.dy) > 4,
-      onPanResponderGrant: () => {
-        tabPan.setOffset({ x: tabOffset.current.x, y: tabOffset.current.y });
-        tabPan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event([null, { dx: tabPan.x, dy: tabPan.y }], { useNativeDriver: false }),
-      onPanResponderRelease: (_, gs) => {
-        tabPan.flattenOffset();
-        if (Math.abs(gs.dx) < 5 && Math.abs(gs.dy) < 5) {
-          handleTripleTap();
-        } else {
-          tabOffset.current = {
-            x: tabOffset.current.x + gs.dx,
-            y: tabOffset.current.y + gs.dy,
-          };
-        }
-      },
-      onPanResponderTerminate: () => {
-        tabPan.flattenOffset();
-      },
-    }), [tabPan, handleTripleTap]);
-
-  const handlePanResponder = useMemo(() =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 4 || Math.abs(gs.dy) > 4,
-      onPanResponderGrant: () => {
-        handlePan.setOffset({ x: handleOffset.current.x, y: handleOffset.current.y });
-        handlePan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event([null, { dx: handlePan.x, dy: handlePan.y }], { useNativeDriver: false }),
-      onPanResponderRelease: (_, gs) => {
-        handlePan.flattenOffset();
-        if (Math.abs(gs.dx) < 5 && Math.abs(gs.dy) < 5) {
-          tabOffset.current = { x: handleOffset.current.x, y: handleOffset.current.y };
-          tabPan.setValue({ x: handleOffset.current.x, y: handleOffset.current.y });
-          setTabPlaced(true);
-          setTabVisible(true);
-        } else {
-          handleOffset.current = {
-            x: handleOffset.current.x + gs.dx,
-            y: handleOffset.current.y + gs.dy,
-          };
-        }
-      },
-      onPanResponderTerminate: () => {
-        handlePan.flattenOffset();
-      },
-    }), [handlePan, tabPan]);
+  const handleShowTab = useCallback(() => {
+    setTabVisible(true);
+    tapCountRef.current = 0;
+  }, []);
 
   const selectedCabinData = useMemo(() => {
     return cabins.find((c) => c.id === selectedCabinId);
@@ -575,16 +523,12 @@ export default function NewBookingScreen() {
                   />
                 </View>
                 {tabVisible ? (
-                  <Animated.View
-                    {...tabPanResponder.panHandlers}
-                    style={[
-                      styles.dateSummary,
-                      tabPlaced && styles.dateSummaryPlaced,
-                      { transform: [{ translateX: tabPan.x }, { translateY: tabPan.y }] },
-                    ]}
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleTabTap}
+                    style={styles.dateSummary}
                     testID="date-summary-tab"
                   >
-                    <View style={styles.dragHint} />
                     <View style={styles.dateItem}>
                       <Calendar size={15} color={Colors.accent} />
                       <Text style={styles.dateText}>
@@ -597,19 +541,17 @@ export default function NewBookingScreen() {
                         {"Выезд: "}{endDate ? format(parseISO(endDate), "dd MMM yyyy", { locale: ru }) : "—"}
                       </Text>
                     </View>
-                  </Animated.View>
+                  </TouchableOpacity>
                 ) : (
-                  <Animated.View
-                    {...handlePanResponder.panHandlers}
-                    style={[
-                      styles.tabHandle,
-                      { transform: [{ translateX: handlePan.x }, { translateY: handlePan.y }] },
-                    ]}
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleShowTab}
+                    style={styles.tabHandle}
                     testID="date-summary-handle"
                   >
                     <Calendar size={14} color={Colors.primary} />
-                    <Text style={styles.tabHandleText}>{"Поставить язычок"}</Text>
-                  </Animated.View>
+                    <Text style={styles.tabHandleText}>{"Показать язычок"}</Text>
+                  </TouchableOpacity>
                 )}
               </View>
 
