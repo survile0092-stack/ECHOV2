@@ -40,7 +40,7 @@ const MONTHS = [
   "\u0414\u0435\u043A\u0430\u0431\u0440\u044C",
 ];
 
-const YEARS = Array.from({ length: 5 }, (_, i) => getYear(new Date()) - 2 + i);
+const YEARS = Array.from({ length: 11 }, (_, i) => 2025 + i);
 
 export default function AnalyticsScreen() {
   const { getAnalyticsData, exportToExcel, cabins, bookings } = useBookingContext();

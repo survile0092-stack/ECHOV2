@@ -183,8 +183,13 @@ export default function NewBookingScreen() {
       now.setHours(0, 0, 0, 0);
 
       const minAllowed = new Date(2025, 0, 1);
+      const maxAllowed = new Date(2035, 11, 31);
       if (isBefore(date, minAllowed)) {
         Alert.alert("Неверная дата", "Нельзя выбрать дату ранее 1 января 2025 года");
+        return;
+      }
+      if (date.getTime() > maxAllowed.getTime()) {
+        Alert.alert("Неверная дата", "Нельзя выбрать дату позднее 31 декабря 2035 года");
         return;
       }
 
@@ -507,6 +512,7 @@ export default function NewBookingScreen() {
                     markedDates={markedDates}
                     markingType="period"
                     minDate="2025-01-01"
+                    maxDate="2035-12-31"
                     theme={{
                       backgroundColor: Colors.surface,
                       calendarBackground: Colors.surface,
