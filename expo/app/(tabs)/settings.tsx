@@ -86,6 +86,47 @@ export default function SettingsScreen() {
     }
   }, [exportBackup]);
 
+  const runApply = useCallback(async (data: AppBackup, mode: 'replace' | 'merge') => {
+    const result = await applyBackup(data, mode);
+    if (result.success) {
+      Alert.alert(
+        "\u0423\u0441\u043F\u0435\u0445",
+        mode === 'merge'
+          ? `\u041E\u0431\u044A\u0435\u0434\u0438\u043D\u0435\u043D\u043E: ${result.counts?.cabins ?? 0} \u0434\u043E\u043C\u0438\u043A\u043E\u0432, ${result.counts?.bookings ?? 0} \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0439`
+          : `\u0414\u0430\u043D\u043D\u044B\u0435 \u0437\u0430\u043C\u0435\u043D\u0435\u043D\u044B: ${result.counts?.cabins ?? 0} \u0434\u043E\u043C\u0438\u043A\u043E\u0432, ${result.counts?.bookings ?? 0} \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0439`
+      );
+    } else {
+      Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", result.error || "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C");
+    }
+  }, [applyBackup]);
+
+  const promptImportMode = useCallback((data: AppBackup) => {
+    const cabinsCount = data.cabins?.length ?? 0;
+    const bookingsCount = data.bookings?.length ?? 0;
+    const message = `\u0412 \u0444\u0430\u0439\u043B\u0435: ${cabinsCount} \u0434\u043E\u043C\u0438\u043A\u043E\u0432, ${bookingsCount} \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0439.\n\n\u00AB\u0417\u0430\u043C\u0435\u043D\u0438\u0442\u044C \u0432\u0441\u0451\u00BB \u2014 \u0442\u0435\u043A\u0443\u0449\u0438\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0431\u0443\u0434\u0443\u0442 \u0443\u0434\u0430\u043B\u0435\u043D\u044B.\n\u00AB\u041E\u0431\u044A\u0435\u0434\u0438\u043D\u0438\u0442\u044C\u00BB \u2014 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u044E\u0449\u0438\u0435 \u043F\u043E ID \u0431\u0443\u0434\u0443\u0442 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B, \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u044B.`;
+    Alert.alert("\u0418\u043C\u043F\u043E\u0440\u0442 \u0434\u0430\u043D\u043D\u044B\u0445", message, [
+      { text: "\u041E\u0442\u043C\u0435\u043D\u0430", style: "cancel" },
+      { text: "\u041E\u0431\u044A\u0435\u0434\u0438\u043D\u0438\u0442\u044C", onPress: () => { void runApply(data, 'merge'); } },
+      { text: "\u0417\u0430\u043C\u0435\u043D\u0438\u0442\u044C \u0432\u0441\u0451", style: "destructive", onPress: () => { void runApply(data, 'replace'); } },
+    ]);
+  }, [runApply]);
+
+  const handleParsed = useCallback((jsonString: string) => {
+    const parsed = parseBackup(jsonString);
+    if (!parsed.success) {
+      Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", parsed.error);
+      return;
+    }
+    if (parsed.versionWarning) {
+      Alert.alert("\u041F\u0440\u0435\u0434\u0443\u043F\u0440\u0435\u0436\u0434\u0435\u043D\u0438\u0435", parsed.versionWarning, [
+        { text: "\u041E\u0442\u043C\u0435\u043D\u0430", style: "cancel" },
+        { text: "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C", onPress: () => promptImportMode(parsed.data) },
+      ]);
+    } else {
+      promptImportMode(parsed.data);
+    }
+  }, [parseBackup, promptImportMode]);
+
   const handleImportBackup = useCallback(async () => {
     try {
       setIsImporting(true);
@@ -94,7 +135,7 @@ export default function SettingsScreen() {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json';
-        input.onchange = async (e: Event) => {
+        input.onchange = (e: Event) => {
           const target = e.target as HTMLInputElement;
           const file = target.files?.[0];
           if (!file) {
@@ -102,18 +143,10 @@ export default function SettingsScreen() {
             return;
           }
           const reader = new FileReader();
-          reader.onload = async (ev) => {
+          reader.onload = (ev) => {
             try {
               const jsonString = ev.target?.result as string;
-              const result = await importBackup(jsonString);
-              if (result.success) {
-                Alert.alert(
-                  "\u0423\u0441\u043F\u0435\u0445",
-                  `\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E: ${result.counts?.cabins ?? 0} \u0434\u043E\u043C\u0438\u043A\u043E\u0432, ${result.counts?.bookings ?? 0} \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0439`
-                );
-              } else {
-                Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", result.error || "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C");
-              }
+              handleParsed(jsonString);
             } catch {
               Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442 \u0444\u0430\u0439\u043B\u0430");
             } finally {
@@ -134,23 +167,14 @@ export default function SettingsScreen() {
 
       const file = Array.isArray(pickedFile) ? pickedFile[0] : pickedFile;
       const jsonString = await file.text();
-
-      const result = await importBackup(jsonString);
-      if (result.success) {
-        Alert.alert(
-          "\u0423\u0441\u043F\u0435\u0445",
-          `\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E: ${result.counts?.cabins ?? 0} \u0434\u043E\u043C\u0438\u043A\u043E\u0432, ${result.counts?.bookings ?? 0} \u0431\u0440\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0439`
-        );
-      } else {
-        Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", result.error || "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C");
-      }
+      handleParsed(jsonString);
     } catch (error) {
       console.log("Import error:", error);
       Alert.alert("\u041E\u0448\u0438\u0431\u043A\u0430", "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435");
     } finally {
       setIsImporting(false);
     }
-  }, [importBackup]);
+  }, [handleParsed]);
 
   const notificationDays = settings.notificationDays || [3, 1];
 

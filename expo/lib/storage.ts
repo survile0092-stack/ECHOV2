@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import type { Cabin, Booking, Reminder, AppSettings, AnalyticsFilter, AnalyticsData, MonthlyAnalytics, CabinPerformance, AppBackup } from '@/types';
 import { parseISO, isWithinInterval, format, getYear, getMonth, isBefore, isAfter, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { deletePhotoFiles } from '@/lib/photoStorage';
 
 const STORAGE_KEYS = {
   CABINS: 'cabins',
@@ -13,7 +14,63 @@ const STORAGE_KEYS = {
   REMINDERS: 'reminders',
   SETTINGS: 'settings',
   INITIALIZED: 'initialized',
+  SCHEMA_VERSION: 'schema_version',
 } as const;
+
+const CURRENT_SCHEMA_VERSION = 2;
+const SUPPORTED_BACKUP_VERSIONS = ['1.0.0', '1.1.0'] as const;
+const CURRENT_BACKUP_VERSION = '1.1.0';
+
+function safeParse<T>(raw: string | null, fallback: T, key: string): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    console.log(`[Storage.safeParse] corrupted data for key=${key}`, e);
+    return fallback;
+  }
+}
+
+function normalizeCabin(cabin: Partial<Cabin> & { id: string; name: string }): Cabin {
+  const capacity = typeof cabin.capacity === 'number' ? cabin.capacity : 2;
+  const pricePerNight = typeof cabin.pricePerNight === 'number' ? cabin.pricePerNight : 0;
+  return {
+    id: cabin.id,
+    name: cabin.name,
+    description: cabin.description ?? '',
+    capacity,
+    pricePerNight,
+    prices: Array.isArray(cabin.prices) && cabin.prices.length > 0
+      ? cabin.prices
+      : [{ id: `p-${cabin.id}-1`, guestCount: capacity, pricePerNight }],
+    amenities: Array.isArray(cabin.amenities) ? cabin.amenities : [],
+    photoUris: Array.isArray(cabin.photoUris) ? cabin.photoUris : [],
+    isAvailable: typeof cabin.isAvailable === 'boolean' ? cabin.isAvailable : true,
+    createdAt: typeof cabin.createdAt === 'number' ? cabin.createdAt : Date.now(),
+  };
+}
+
+function normalizeBooking(booking: Partial<Booking> & { id: string; cabinId: string }): Booking {
+  const totalPrice = typeof booking.totalPrice === 'number' ? booking.totalPrice : 0;
+  const prepayment = typeof booking.prepayment === 'number' ? booking.prepayment : 0;
+  return {
+    id: booking.id,
+    cabinId: booking.cabinId,
+    cabinName: booking.cabinName ?? '',
+    guestName: booking.guestName ?? 'Имя гостя не указано',
+    guestPhone: booking.guestPhone ?? '',
+    guestCount: typeof booking.guestCount === 'number' ? booking.guestCount : 1,
+    checkInDate: booking.checkInDate ?? '',
+    checkOutDate: booking.checkOutDate ?? '',
+    totalPrice,
+    prepayment,
+    remaining: typeof booking.remaining === 'number' ? booking.remaining : Math.max(totalPrice - prepayment, 0),
+    customPrice: typeof booking.customPrice === 'boolean' ? booking.customPrice : false,
+    status: booking.status ?? 'PENDING',
+    notes: booking.notes ?? '',
+    createdAt: typeof booking.createdAt === 'number' ? booking.createdAt : Date.now(),
+  };
+}
 
 const demoCabins: Cabin[] = [
   {
@@ -144,27 +201,54 @@ export class Storage {
 
   static async initializeDemoData(): Promise<void> {
     const initialized = await AsyncStorage.getItem(STORAGE_KEYS.INITIALIZED);
-    if (initialized) return;
+    if (!initialized) {
+      await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(demoCabins));
+      await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify([]));
+      await AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify([]));
+      await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({
+        notificationsEnabled: true,
+        darkMode: false,
+        notificationDays: [3, 1],
+      }));
+      await AsyncStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+      await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, String(CURRENT_SCHEMA_VERSION));
+      return;
+    }
+    await this.runMigrations();
+  }
 
-    await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(demoCabins));
-    await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify([]));
-    await AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify([]));
-    await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({
-      notificationsEnabled: true,
-      darkMode: false,
-      notificationDays: [3, 1],
-    }));
-    await AsyncStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+  private static async runMigrations(): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
+      const version = stored ? parseInt(stored, 10) : 1;
+      if (version >= CURRENT_SCHEMA_VERSION) return;
+      console.log(`[Storage.runMigrations] migrating from v${version} to v${CURRENT_SCHEMA_VERSION}`);
+
+      const cabinsRaw = await AsyncStorage.getItem(STORAGE_KEYS.CABINS);
+      const cabins = safeParse<Partial<Cabin>[]>(cabinsRaw, [], 'cabins');
+      const validCabins = cabins.filter((c): c is Partial<Cabin> & { id: string; name: string } => !!c?.id && !!c?.name);
+      const normalizedCabins = validCabins.map(normalizeCabin);
+      await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(normalizedCabins));
+
+      const bookingsRaw = await AsyncStorage.getItem(STORAGE_KEYS.BOOKINGS);
+      const bookings = safeParse<Partial<Booking>[]>(bookingsRaw, [], 'bookings');
+      const validBookings = bookings.filter((b): b is Partial<Booking> & { id: string; cabinId: string } => !!b?.id && !!b?.cabinId);
+      const normalizedBookings = validBookings.map(normalizeBooking);
+      await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(normalizedBookings));
+
+      await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, String(CURRENT_SCHEMA_VERSION));
+      console.log('[Storage.runMigrations] migration complete');
+    } catch (e) {
+      console.log('[Storage.runMigrations] error', e);
+    }
   }
 
   static async getCabins(): Promise<Cabin[]> {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.CABINS);
-    if (!data) return [];
-    const cabins: Cabin[] = JSON.parse(data);
-    return cabins.map(cabin => ({
-      ...cabin,
-      prices: cabin.prices || [{ id: `p-${cabin.id}-1`, guestCount: cabin.capacity, pricePerNight: cabin.pricePerNight }],
-    }));
+    const parsed = safeParse<Partial<Cabin>[]>(data, [], 'cabins');
+    return parsed
+      .filter((c): c is Partial<Cabin> & { id: string; name: string } => !!c?.id && !!c?.name)
+      .map(normalizeCabin);
   }
 
   static async saveCabin(cabin: Cabin): Promise<void> {
@@ -182,13 +266,24 @@ export class Storage {
 
   static async deleteCabin(id: string): Promise<void> {
     const cabins = await this.getCabins();
+    const target = cabins.find(c => c.id === id);
     const filtered = cabins.filter(c => c.id !== id);
     await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(filtered));
+    if (target?.photoUris && target.photoUris.length > 0) {
+      try {
+        deletePhotoFiles(target.photoUris);
+      } catch (e) {
+        console.log('[Storage.deleteCabin] photo cleanup error', e);
+      }
+    }
   }
 
   static async getBookings(): Promise<Booking[]> {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.BOOKINGS);
-    return data ? JSON.parse(data) : [];
+    const parsed = safeParse<Partial<Booking>[]>(data, [], 'bookings');
+    return parsed
+      .filter((b): b is Partial<Booking> & { id: string; cabinId: string } => !!b?.id && !!b?.cabinId)
+      .map(normalizeBooking);
   }
 
   static async saveBooking(booking: Booking): Promise<void> {
@@ -220,7 +315,7 @@ export class Storage {
 
   static async getReminders(): Promise<Reminder[]> {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.REMINDERS);
-    return data ? JSON.parse(data) : [];
+    return safeParse<Reminder[]>(data, [], 'reminders');
   }
 
   static async saveReminder(reminder: Reminder): Promise<void> {
@@ -250,11 +345,11 @@ export class Storage {
       notificationDays: [3, 1],
     };
     if (!data) return defaultSettings;
-    const parsed = JSON.parse(data);
+    const parsed = safeParse<Partial<AppSettings>>(data, {}, 'settings');
     return {
       ...defaultSettings,
       ...parsed,
-      notificationDays: parsed.notificationDays || [3, 1],
+      notificationDays: Array.isArray(parsed.notificationDays) ? parsed.notificationDays : [3, 1],
     };
   }
 
@@ -479,7 +574,7 @@ export class Storage {
       const settings = await this.getSettings();
 
       const backup: AppBackup = {
-        version: '1.1.0',
+        version: CURRENT_BACKUP_VERSION,
         exportDate: new Date().toISOString(),
         cabins,
         bookings,
@@ -528,33 +623,83 @@ export class Storage {
     }
   }
 
-  static async importBackup(jsonString: string): Promise<{ success: boolean; error?: string; counts?: { cabins: number; bookings: number } }> {
+  static parseBackup(jsonString: string): { success: true; data: AppBackup; versionWarning?: string } | { success: false; error: string } {
     try {
       const data = JSON.parse(jsonString) as AppBackup;
-
       if (!data.cabins || !data.bookings || !data.settings) {
         return { success: false, error: 'Неверный формат файла резервной копии' };
       }
-
       if (!Array.isArray(data.cabins) || !Array.isArray(data.bookings)) {
         return { success: false, error: 'Данные повреждены или имеют неверный формат' };
       }
+      const versionWarning = data.version && !SUPPORTED_BACKUP_VERSIONS.includes(data.version as typeof SUPPORTED_BACKUP_VERSIONS[number])
+        ? `Версия файла (${data.version}) отличается от поддерживаемой (${CURRENT_BACKUP_VERSION}). Данные могут импортироваться некорректно.`
+        : undefined;
+      return { success: true, data, versionWarning };
+    } catch (error) {
+      console.log('Backup parse error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Ошибка при чтении файла' };
+    }
+  }
 
-      await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(data.cabins));
-      await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(data.bookings));
-      await AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(data.reminders || []));
-      await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
+  static async applyBackup(
+    data: AppBackup,
+    mode: 'replace' | 'merge'
+  ): Promise<{ success: boolean; error?: string; counts?: { cabins: number; bookings: number } }> {
+    try {
+      const incomingCabins = (data.cabins ?? [])
+        .filter((c): c is Partial<Cabin> & { id: string; name: string } => !!c?.id && !!c?.name)
+        .map(normalizeCabin);
+      const incomingBookings = (data.bookings ?? [])
+        .filter((b): b is Partial<Booking> & { id: string; cabinId: string } => !!b?.id && !!b?.cabinId)
+        .map(normalizeBooking);
+      const incomingReminders = Array.isArray(data.reminders) ? data.reminders : [];
 
-      console.log(`Import successful: ${data.cabins.length} cabins, ${data.bookings.length} bookings`);
+      if (mode === 'replace') {
+        await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(incomingCabins));
+        await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(incomingBookings));
+        await AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(incomingReminders));
+        if (data.settings) {
+          await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
+        }
+      } else {
+        const existingCabins = await this.getCabins();
+        const cabinMap = new Map<string, Cabin>(existingCabins.map(c => [c.id, c]));
+        for (const c of incomingCabins) cabinMap.set(c.id, c);
+        await AsyncStorage.setItem(STORAGE_KEYS.CABINS, JSON.stringify(Array.from(cabinMap.values())));
+
+        const existingBookings = await this.getBookings();
+        const bookingMap = new Map<string, Booking>(existingBookings.map(b => [b.id, b]));
+        for (const b of incomingBookings) bookingMap.set(b.id, b);
+        await AsyncStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(Array.from(bookingMap.values())));
+
+        const existingReminders = await this.getReminders();
+        const reminderMap = new Map<string, Reminder>(existingReminders.map(r => [r.id, r]));
+        for (const r of incomingReminders) {
+          if (r?.id) reminderMap.set(r.id, r);
+        }
+        await AsyncStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(Array.from(reminderMap.values())));
+      }
+
+      await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, String(CURRENT_SCHEMA_VERSION));
+      await AsyncStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+      console.log(`[Storage.applyBackup] mode=${mode} cabins=${incomingCabins.length} bookings=${incomingBookings.length}`);
 
       return {
         success: true,
-        counts: { cabins: data.cabins.length, bookings: data.bookings.length },
+        counts: { cabins: incomingCabins.length, bookings: incomingBookings.length },
       };
     } catch (error) {
-      console.log('Backup import error:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Ошибка при чтении файла' };
+      console.log('Backup apply error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Ошибка при импорте' };
     }
+  }
+
+  static async importBackup(jsonString: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; error?: string; counts?: { cabins: number; bookings: number } }> {
+    const parsed = this.parseBackup(jsonString);
+    if (!parsed.success) return parsed;
+    return this.applyBackup(parsed.data, mode);
   }
 
   private static buildExcelData(bookings: Booking[], cabins: Cabin[]): (string | number)[][] {
@@ -567,7 +712,7 @@ export class Storage {
           cabin?.name || b.cabinName,
           b.guestName,
           b.guestPhone,
-          b.guestCount || 2,
+          b.guestCount || 1,
           b.checkInDate,
           b.checkOutDate,
           b.totalPrice,

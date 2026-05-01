@@ -235,8 +235,21 @@ export const [BookingProvider, useBookingContext] = createContextHook(() => {
     return Storage.exportBackup();
   }, []);
 
-  const importBackup = useCallback(async (jsonString: string) => {
-    const result = await Storage.importBackup(jsonString);
+  const importBackup = useCallback(async (jsonString: string, mode: 'replace' | 'merge' = 'replace') => {
+    const result = await Storage.importBackup(jsonString, mode);
+    if (result.success) {
+      void queryClient.invalidateQueries({ queryKey: ['cabins'] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['reminders'] });
+      void queryClient.invalidateQueries({ queryKey: ['settings'] });
+    }
+    return result;
+  }, [queryClient]);
+
+  const parseBackup = useCallback((jsonString: string) => Storage.parseBackup(jsonString), []);
+
+  const applyBackup = useCallback(async (data: import('@/types').AppBackup, mode: 'replace' | 'merge') => {
+    const result = await Storage.applyBackup(data, mode);
     if (result.success) {
       void queryClient.invalidateQueries({ queryKey: ['cabins'] });
       void queryClient.invalidateQueries({ queryKey: ['bookings'] });
@@ -276,6 +289,8 @@ export const [BookingProvider, useBookingContext] = createContextHook(() => {
     exportToExcel,
     exportBackup,
     importBackup,
+    parseBackup,
+    applyBackup,
     refresh,
   }), [
     cabinsQuery.data,
@@ -299,6 +314,8 @@ export const [BookingProvider, useBookingContext] = createContextHook(() => {
     exportToExcel,
     exportBackup,
     importBackup,
+    parseBackup,
+    applyBackup,
     refresh,
   ]);
 });

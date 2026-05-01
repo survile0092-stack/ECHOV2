@@ -9,8 +9,6 @@ import {
   SafeAreaView,
   Alert,
   Switch,
-  Animated,
-  PanResponder,
 } from "react-native";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { Calendar, ChevronDown, Save, Moon, CreditCard } from "lucide-react-native";

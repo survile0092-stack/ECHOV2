@@ -80,11 +80,25 @@ export default function CabinEditScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        const persisted = await Promise.all(
+        const settled = await Promise.allSettled(
           result.assets.map((a) => persistPickedPhoto(a.uri))
         );
-        setPhotoUris((prev) => [...prev, ...persisted]);
-        console.log("Photos added:", persisted.length);
+        const persisted = settled
+          .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+          .map((r) => r.value);
+        const failedCount = settled.length - persisted.length;
+        if (persisted.length > 0) {
+          setPhotoUris((prev) => [...prev, ...persisted]);
+        }
+        console.log("Photos added:", persisted.length, "failed:", failedCount);
+        if (failedCount > 0) {
+          Alert.alert(
+            "Ошибка",
+            persisted.length > 0
+              ? `Часть фотографий (${failedCount}) не удалось сохранить. Попробуйте выбрать их ещё раз.`
+              : "Не удалось сохранить фотографии. Попробуйте ещё раз."
+          );
+        }
       }
     } catch (error) {
       console.log("Image picker error:", error);
@@ -109,9 +123,14 @@ export default function CabinEditScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        const persisted = await persistPickedPhoto(result.assets[0].uri);
-        setPhotoUris((prev) => [...prev, persisted]);
-        console.log("Photo taken");
+        try {
+          const persisted = await persistPickedPhoto(result.assets[0].uri);
+          setPhotoUris((prev) => [...prev, persisted]);
+          console.log("Photo taken");
+        } catch (e) {
+          console.log("Photo persist error:", e);
+          Alert.alert("Ошибка", "Не удалось сохранить фото. Попробуйте ещё раз.");
+        }
       }
     } catch (error) {
       console.log("Camera error:", error);
