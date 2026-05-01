@@ -79,12 +79,7 @@ export class NotificationManager {
 
       const checkInDate = parseISO(booking.checkInDate);
       const now = new Date();
-      const days = Array.isArray(settings.notificationDays) ? settings.notificationDays : [];
-
-      if (days.length === 0) {
-        console.log('Notifications: notificationDays is empty, skipping scheduling');
-        return;
-      }
+      const days = settings.notificationDays || [3, 1];
 
       for (const daysBefore of days) {
         const reminderDate = subDays(checkInDate, daysBefore);

@@ -85,32 +85,12 @@ export async function persistPickedPhoto(sourceUri: string): Promise<string> {
     }
   }
 
-  const result = await persistViaFetch(sourceUri, dir, filename);
-  if (result) return result;
-
-  throw new Error('Не удалось сохранить фото на устройстве');
-}
-
-export function deletePhotoFiles(filenames: string[] | undefined | null): void {
-  if (!filenames || filenames.length === 0) return;
-  if (Platform.OS === 'web') return;
-  const dir = ensurePhotosDir();
-  if (!dir) return;
-  for (const stored of filenames) {
-    if (!stored) continue;
-    if (stored.startsWith('http://') || stored.startsWith('https://') || stored.startsWith('data:') || stored.startsWith('blob:')) continue;
-    try {
-      const filename = stored.includes('/') ? stored.split('/').pop()?.split('?')[0] ?? '' : stored;
-      if (!filename) continue;
-      const file = new FSFile(dir, filename);
-      if (file.exists) {
-        file.delete();
-        console.log('[photoStorage] deleted', filename);
-      }
-    } catch (e) {
-      console.log('[photoStorage] deletePhotoFiles error', e);
-    }
+  if (isContent || isFile) {
+    const result = await persistViaFetch(sourceUri, dir, filename);
+    if (result) return result;
   }
+
+  return sourceUri;
 }
 
 export function resolvePhotoUri(stored: string | undefined | null): string {
