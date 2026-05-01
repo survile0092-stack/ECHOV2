@@ -15,6 +15,7 @@ import { Plus, X, Save, Camera, ImageIcon } from "lucide-react-native";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useBookingContext } from "@/context/BookingContext";
+import { persistPickedPhoto, resolvePhotoUri } from "@/lib/photoStorage";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import type { Cabin, CabinPrice } from "@/types";
 
@@ -79,9 +80,11 @@ export default function CabinEditScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        const newUris = result.assets.map((a) => a.uri);
-        setPhotoUris((prev) => [...prev, ...newUris]);
-        console.log("Photos added:", newUris.length);
+        const persisted = await Promise.all(
+          result.assets.map((a) => persistPickedPhoto(a.uri))
+        );
+        setPhotoUris((prev) => [...prev, ...persisted]);
+        console.log("Photos added:", persisted.length);
       }
     } catch (error) {
       console.log("Image picker error:", error);
@@ -106,7 +109,8 @@ export default function CabinEditScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setPhotoUris((prev) => [...prev, result.assets[0].uri]);
+        const persisted = await persistPickedPhoto(result.assets[0].uri);
+        setPhotoUris((prev) => [...prev, persisted]);
         console.log("Photo taken");
       }
     } catch (error) {
@@ -206,7 +210,7 @@ export default function CabinEditScreen() {
               {photoUris.map((uri, index) => (
                 <View key={`${uri}-${index}`} style={styles.photoItem}>
                   <Image
-                    source={{ uri }}
+                    source={{ uri: resolvePhotoUri(uri) }}
                     style={styles.photoImage}
                     contentFit="cover"
                   />

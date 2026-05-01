@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useBookingContext } from "@/context/BookingContext";
+import { resolvePhotoUri } from "@/lib/photoStorage";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import type { Cabin } from "@/types";
 
@@ -150,7 +151,7 @@ const CabinCard = React.memo(function CabinCard({
     >
       {cabin.photoUris && cabin.photoUris.length > 0 ? (
         <Image
-          source={{ uri: cabin.photoUris[0] }}
+          source={{ uri: resolvePhotoUri(cabin.photoUris[0]) }}
           style={styles.cabinThumbnail}
           contentFit="cover"
           transition={150}

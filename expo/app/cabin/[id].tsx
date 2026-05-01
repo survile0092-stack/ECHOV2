@@ -23,6 +23,7 @@ import {
 } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useBookingContext } from "@/context/BookingContext";
+import { resolvePhotoUri } from "@/lib/photoStorage";
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { format, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -126,7 +127,7 @@ export default function CabinDetailScreen() {
                 {cabin.photoUris.map((uri, index) => (
                   <Image
                     key={`${uri}-${index}`}
-                    source={{ uri }}
+                    source={{ uri: resolvePhotoUri(uri) }}
                     style={styles.heroPhoto}
                     contentFit="cover"
                   />
