@@ -431,10 +431,6 @@ export default function EditBookingScreen() {
       Alert.alert("Ошибка", "Пожалуйста, выберите домик");
       return;
     }
-    if (!guestName.trim()) {
-      Alert.alert("Ошибка", "Пожалуйста, введите имя гостя");
-      return;
-    }
     if (!startDate || !endDate) {
       Alert.alert("Ошибка", "Пожалуйста, выберите даты заезда и выезда");
       return;
@@ -468,7 +464,7 @@ export default function EditBookingScreen() {
       id: existingBooking.id,
       cabinId: selectedCabinId,
       cabinName: cabin.name,
-      guestName: guestName.trim(),
+      guestName: guestName.trim() || "Имя гостя не указано",
       guestPhone: guestPhone.trim(),
       guestCount: guestCountNum,
       checkInDate: startDate,
@@ -520,7 +516,7 @@ export default function EditBookingScreen() {
     );
   }
 
-  const isFormValid = Boolean(selectedCabinId && startDate && endDate && guestName.trim());
+  const isFormValid = Boolean(selectedCabinId && startDate && endDate);
 
   return (
     <SafeAreaView style={styles.container}>
