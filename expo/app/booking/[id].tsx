@@ -157,6 +157,7 @@ export default function BookingDetailScreen() {
             icon={<User size={20} color={Colors.primary} />}
             label={"Имя гостя"}
             value={booking.guestName}
+            highlight={booking.guestName === "Имя гостя не указано"}
           />
           {booking.guestPhone ? (
             <InfoRow
@@ -318,17 +319,19 @@ function InfoRow({
   icon,
   label,
   value,
+  highlight,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  highlight?: boolean;
 }) {
   return (
     <View style={styles.infoRow}>
       {icon}
       <View style={styles.infoContent}>
         <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
+        <Text style={[styles.infoValue, highlight && styles.infoValueMissing]}>{value}</Text>
       </View>
     </View>
   );
@@ -428,6 +431,15 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
     fontWeight: "600" as const,
     marginTop: 1,
+  },
+  infoValueMissing: {
+    backgroundColor: "#FFF3B0",
+    color: "#7A5A00",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: "hidden",
+    alignSelf: "flex-start",
   },
   cabinRow: {
     flexDirection: "row",

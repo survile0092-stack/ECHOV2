@@ -275,7 +275,7 @@ const BookingPreviewCard = React.memo(function BookingPreviewCard({
         </View>
       </View>
       <View style={styles.bookingInfo}>
-        <Text style={styles.bookingGuest}>{booking.guestName}</Text>
+        <Text style={[styles.bookingGuest, booking.guestName === "Имя гостя не указано" && styles.guestNameMissing]}>{booking.guestName}</Text>
         <Text style={styles.bookingCabin}>{booking.cabinName}</Text>
         <Text style={styles.bookingDate}>
           {format(parseISO(booking.checkInDate), "dd MMM yyyy", { locale: ru })} {"\u2014"}{" "}
@@ -463,6 +463,15 @@ const styles = StyleSheet.create({
     ...Typography.h4,
     color: Colors.onSurface,
     fontSize: 15,
+  },
+  guestNameMissing: {
+    backgroundColor: "#FFF3B0",
+    color: "#7A5A00",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: "hidden",
+    alignSelf: "flex-start",
   },
   bookingCabin: {
     ...Typography.caption,

@@ -309,7 +309,7 @@ const BookingItem = React.memo(function BookingItem({
           <Text style={styles.bookingAvatarText}>{booking.guestName.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={styles.bookingInfo}>
-          <Text style={styles.bookingGuest} numberOfLines={1}>{booking.guestName}</Text>
+          <Text style={[styles.bookingGuest, booking.guestName === "Имя гостя не указано" && styles.guestNameMissing]} numberOfLines={1}>{booking.guestName}</Text>
           <View style={styles.bookingDates}>
             <Calendar size={12} color={Colors.onSurfaceVariant} />
             <Text style={styles.bookingDateText}>
@@ -588,6 +588,15 @@ const styles = StyleSheet.create({
     color: Colors.onSurface,
     fontWeight: "600" as const,
     fontSize: 14,
+  },
+  guestNameMissing: {
+    backgroundColor: "#FFF3B0",
+    color: "#7A5A00",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: "hidden",
+    alignSelf: "flex-start",
   },
   bookingDates: {
     flexDirection: "row",

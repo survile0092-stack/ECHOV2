@@ -343,7 +343,7 @@ export default function BookingsScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.selectedBookingHeader}>
-                    <Text style={styles.selectedBookingGuest}>{booking.guestName}</Text>
+                    <Text style={[styles.selectedBookingGuest, booking.guestName === "Имя гостя не указано" && styles.guestNameMissing]}>{booking.guestName}</Text>
                     <View
                       style={[
                         styles.statusBadge,
@@ -418,7 +418,7 @@ export default function BookingsScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={styles.modalBookingHeader}>
-                      <Text style={styles.modalBookingGuest}>{booking.guestName}</Text>
+                      <Text style={[styles.modalBookingGuest, booking.guestName === "Имя гостя не указано" && styles.guestNameMissing]}>{booking.guestName}</Text>
                       <View
                         style={[
                           styles.statusBadge,
@@ -537,7 +537,7 @@ const BookingCard = React.memo(function BookingCard({
         <View style={styles.bookingCardLeft}>
           <View style={[styles.bookingIndicator, { backgroundColor: getStatusColor() }]} />
           <View>
-            <Text style={styles.guestName}>{booking.guestName}</Text>
+            <Text style={[styles.guestName, booking.guestName === "Имя гостя не указано" && styles.guestNameMissing]}>{booking.guestName}</Text>
             <Text style={styles.cabinName}>{booking.cabinName}</Text>
           </View>
         </View>
@@ -704,6 +704,15 @@ const styles = StyleSheet.create({
     ...Typography.h4,
     color: Colors.onSurface,
     fontSize: 15,
+  },
+  guestNameMissing: {
+    backgroundColor: "#FFF3B0",
+    color: "#7A5A00",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: "hidden",
+    alignSelf: "flex-start",
   },
   cabinName: {
     ...Typography.bodySmall,
