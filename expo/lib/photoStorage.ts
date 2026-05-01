@@ -32,6 +32,32 @@ function getExtension(uri: string): string {
   return 'jpg';
 }
 
+function makeFilename(ext: string): string {
+  return `cabin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+}
+
+async function persistViaFetch(sourceUri: string, dir: Directory, filename: string): Promise<string | null> {
+  try {
+    const response = await fetch(sourceUri);
+    if (!response.ok) {
+      console.log('[photoStorage] persistViaFetch bad status', response.status);
+      return null;
+    }
+    const buf = await response.arrayBuffer();
+    const dest = new FSFile(dir, filename);
+    if (dest.exists) {
+      try { dest.delete(); } catch {}
+    }
+    dest.create();
+    dest.write(new Uint8Array(buf));
+    console.log('[photoStorage] persisted via fetch as', filename);
+    return filename;
+  } catch (e) {
+    console.log('[photoStorage] persistViaFetch error', e);
+    return null;
+  }
+}
+
 export async function persistPickedPhoto(sourceUri: string): Promise<string> {
   if (!sourceUri) return sourceUri;
   if (Platform.OS === 'web') return sourceUri;
@@ -40,18 +66,31 @@ export async function persistPickedPhoto(sourceUri: string): Promise<string> {
   }
   const dir = ensurePhotosDir();
   if (!dir) return sourceUri;
-  try {
-    const ext = getExtension(sourceUri);
-    const filename = `cabin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const dest = new FSFile(dir, filename);
-    const src = new FSFile(sourceUri);
-    src.copy(dest);
-    console.log('[photoStorage] persisted photo as', filename);
-    return filename;
-  } catch (e) {
-    console.log('[photoStorage] persistPickedPhoto error', e);
-    return sourceUri;
+
+  const ext = getExtension(sourceUri);
+  const filename = makeFilename(ext);
+
+  const isContent = sourceUri.startsWith('content://');
+  const isFile = sourceUri.startsWith('file://') || sourceUri.startsWith('/');
+
+  if (isFile) {
+    try {
+      const dest = new FSFile(dir, filename);
+      const src = new FSFile(sourceUri);
+      src.copy(dest);
+      console.log('[photoStorage] persisted (copy) as', filename);
+      return filename;
+    } catch (e) {
+      console.log('[photoStorage] copy failed, trying fetch fallback', e);
+    }
   }
+
+  if (isContent || isFile) {
+    const result = await persistViaFetch(sourceUri, dir, filename);
+    if (result) return result;
+  }
+
+  return sourceUri;
 }
 
 export function resolvePhotoUri(stored: string | undefined | null): string {
@@ -66,9 +105,9 @@ export function resolvePhotoUri(stored: string | undefined | null): string {
     return stored;
   }
 
-  if (stored.startsWith('file://') || stored.startsWith('/')) {
+  if (stored.startsWith('file://') || stored.startsWith('/') || stored.startsWith('content://')) {
     try {
-      const filename = stored.split('/').pop() ?? '';
+      const filename = stored.split('/').pop()?.split('?')[0] ?? '';
       if (filename) {
         const dir = ensurePhotosDir();
         if (dir) {
@@ -76,8 +115,10 @@ export function resolvePhotoUri(stored: string | undefined | null): string {
           if (candidate.exists) return candidate.uri;
         }
       }
-      const direct = new FSFile(stored);
-      if (direct.exists) return direct.uri;
+      if (!stored.startsWith('content://')) {
+        const direct = new FSFile(stored);
+        if (direct.exists) return direct.uri;
+      }
     } catch (e) {
       console.log('[photoStorage] resolvePhotoUri legacy error', e);
     }
